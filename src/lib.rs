@@ -7058,6 +7058,15 @@ multiline-compatible = """4.5.6"""
         assert!(!is_locator_wait_context_loss(&RwError::Message(
             "Execution context was destroyed.".to_string()
         )));
+        // The serialized-evaluate path rewraps a destroyed context as this message.
+        assert!(is_locator_wait_context_loss(
+            &upstream_context_destroyed_error()
+        ));
+        // Page text that only contains the rewrapped message is not context loss.
+        assert!(!is_locator_wait_context_loss(&RwError::Message(format!(
+            "Error: {UPSTREAM_CONTEXT_DESTROYED_MESSAGE}
+    at <anonymous>:1:7"
+        ))));
         assert!(!is_locator_wait_context_loss(&RwError::Timeout(100)));
     }
 
@@ -23408,6 +23417,66 @@ return this.dataset.mainWorldOverride === "observed";
     }
 
     #[tokio::test]
+    async fn locator_wait_rearms_when_serialized_evaluate_loses_its_context() {
+        let mut harness = navigation_test_harness(4);
+        let page = Arc::clone(&harness.page);
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let attempt_count = Arc::clone(&attempts);
+        let attempt_page = Arc::clone(&page);
+        let wait = tokio::spawn(run_locator_wait_retry(
+            page,
+            Duration::from_secs(5),
+            move |deadline| {
+                attempt_count.fetch_add(1, Ordering::SeqCst);
+                let page = Arc::clone(&attempt_page);
+                async move {
+                    evaluate_expression_in_session_before(
+                        &page.browser.client,
+                        "page-session",
+                        None,
+                        make_evaluate_expression("document.querySelector('#target') !== null", None),
+                        deadline,
+                    )
+                    .await
+                }
+            },
+        ));
+
+        // A navigation destroys the context while the first attempt is in the page.
+        let install = harness.next_command("Runtime.evaluate").await;
+        harness.reply(
+            &install,
+            json!({ "result": { "type": "function", "objectId": "serializer-before-navigation" } }),
+        );
+        let first_attempt = harness.next_command("Runtime.callFunctionOn").await;
+        harness.reply_error_with_code(
+            &first_attempt,
+            -32_000,
+            "Execution context was destroyed.",
+        );
+
+        // The wait proves the target is still alive, then re-arms in the new document.
+        harness.reply_next("Target.getTargetInfo", json!({})).await;
+        let reinstall = harness.next_command("Runtime.evaluate").await;
+        harness.reply(
+            &reinstall,
+            json!({ "result": { "type": "function", "objectId": "serializer-after-navigation" } }),
+        );
+        let second_attempt = harness.next_command("Runtime.callFunctionOn").await;
+        assert_eq!(
+            second_attempt["params"]["objectId"],
+            "serializer-after-navigation"
+        );
+        harness.reply(
+            &second_attempt,
+            json!({ "result": { "type": "boolean", "value": true } }),
+        );
+
+        assert_eq!(wait.await.unwrap().unwrap(), "true");
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
     async fn evaluate_serializer_cache_reinstalls_once_after_navigation_recreates_context() {
         let mut harness = navigation_test_harness(4);
         let client = Arc::clone(&harness.page.browser.client);
@@ -35159,10 +35228,11 @@ fn execution_context_destroyed_error(error: &RwError) -> bool {
     )
 }
 
+const UPSTREAM_CONTEXT_DESTROYED_MESSAGE: &str =
+    "Execution context was destroyed, most likely because of a navigation.";
+
 fn upstream_context_destroyed_error() -> RwError {
-    RwError::Message(
-        "Execution context was destroyed, most likely because of a navigation.".to_string(),
-    )
+    RwError::Message(UPSTREAM_CONTEXT_DESTROYED_MESSAGE.to_string())
 }
 
 async fn install_runtime_value_serializer(
@@ -38762,6 +38832,9 @@ async fn page_history_observed_impl(
 fn is_locator_wait_context_loss(error: &RwError) -> bool {
     let message = match error {
         RwError::Cdp { message, .. } => message.to_ascii_lowercase(),
+        // The serialized-evaluate path reports a destroyed context as this exact
+        // message instead of the raw CDP error. Any other message may be page text.
+        RwError::Message(message) => return message == UPSTREAM_CONTEXT_DESTROYED_MESSAGE,
         _ => return false,
     };
     // Only retry when the resolved execution environment disappeared; page terminal state is
