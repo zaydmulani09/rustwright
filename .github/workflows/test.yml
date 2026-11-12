@@ -16,7 +16,7 @@ jobs:
       matrix:
         include:
           - label: fix
-            ref: fix/locator-wait-context-loss-rewrap
+            ref: fix/async-wait-for-function-single-dispatch
           - label: baseline-main
             ref: 16aabd1660c264fc0a18e3dfbfd6888e3463c8bc
 
@@ -130,10 +130,12 @@ jobs:
           test_async_frame_and_handle_identity_wrappers or
           test_async_api_basic_flow"
 
-      - name: Navigation mid-wait tests (issue 286; expected to fail on baseline-main)
+      - name: Async generator, changelog, and no-browser wait_for_function tests (issue 287)
+        if: always()
+        run: pytest tests/test_async_generated_fresh.py tests/test_changelog.py -p no:cacheprovider
+
+      - name: Browser wait_for_function tests (issue 287; slow-promise test expected to fail on baseline-main)
         if: always()
         run: >-
           pytest tests/test_rustwright_sync_api.py -p no:cacheprovider
-          -k "survives_navigation or absence_state_resolves_on_navigation or
-          survives_multiple_navigations or navigation_preserves_timeout_budget or
-          wait_for_fails_fast_when_page_closes"
+          -k "wait_for_function or wait_for_url or async_mutation"
