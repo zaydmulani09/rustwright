@@ -1775,6 +1775,15 @@ def _call_action(fn, *args, **kwargs):
         _ACTION_CANCELLATION.reset(context)
 
 
+def _call_cleanup(fn, *args, **kwargs):
+    """Run required cleanup even after the owning async call was cancelled."""
+    context = _ACTION_CANCELLATION.set(None)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        _ACTION_CANCELLATION.reset(context)
+
+
 def _call(fn, *args, **kwargs):
     _check_action_cancelled()
     try:
@@ -15644,7 +15653,7 @@ class Frame(_EventEmitter):
                 matched = handle._truthy(command_timeout)
             finally:
                 if not matched and not handle._disposed:
-                    handle.dispose()
+                    _call_cleanup(handle.dispose)
             if matched:
                 return handle
             time.sleep(interval)
@@ -19788,7 +19797,7 @@ class Page:
                 matched = handle._truthy(command_timeout)
             finally:
                 if not matched and not handle._disposed:
-                    handle.dispose()
+                    _call_cleanup(handle.dispose)
             if matched:
                 return handle
             time.sleep(interval)
