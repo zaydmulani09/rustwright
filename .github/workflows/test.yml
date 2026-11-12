@@ -132,7 +132,7 @@ jobs:
 
       - name: Async generator, changelog, and no-browser wait_for_function tests (issue 287)
         if: always()
-        run: pytest tests/test_async_generated_fresh.py tests/test_changelog.py -p no:cacheprovider
+        run: python -m pytest tests/test_async_generated_fresh.py tests/test_changelog.py -p no:cacheprovider
 
       - name: Browser wait_for_function tests (issue 287; slow-promise test expected to fail on baseline-main)
         if: always()
