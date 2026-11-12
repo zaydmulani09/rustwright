@@ -1,20 +1,30 @@
 name: Rustwright Tests
 
 on:
-  pull_request:
   push:
+    branches: ['ci-verify/**']
 
 jobs:
   test:
-    name: cargo and fast pytest
+    name: cargo and fast pytest (${{ matrix.label }})
     # Matches the development repo's runner. The mcp suite includes
     # Chromium race/stability tests that hold green on this runner class but
     # produce false failures on ubuntu-latest.
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: fix
+            ref: fix/locator-wait-context-loss-rewrap
+          - label: baseline-main
+            ref: 16aabd1
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ matrix.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -119,3 +129,11 @@ jobs:
           test_async_keyboard_type_respects_delay or
           test_async_frame_and_handle_identity_wrappers or
           test_async_api_basic_flow"
+
+      - name: Navigation mid-wait tests (issue 286; expected to fail on baseline-main)
+        if: always()
+        run: >-
+          pytest tests/test_rustwright_sync_api.py -p no:cacheprovider
+          -k "survives_navigation or absence_state_resolves_on_navigation or
+          survives_multiple_navigations or navigation_preserves_timeout_budget or
+          wait_for_fails_fast_when_page_closes"
