@@ -10,7 +10,7 @@ jobs:
     # Matches the development repo's runner. The mcp suite includes
     # Chromium race/stability tests that hold green on this runner class but
     # produce false failures on ubuntu-latest.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -18,7 +18,7 @@ jobs:
           - label: fix
             ref: fix/locator-wait-context-loss-rewrap
           - label: baseline-main
-            ref: 16aabd1
+            ref: 16aabd1660c264fc0a18e3dfbfd6888e3463c8bc
 
     steps:
       - name: Check out repository
