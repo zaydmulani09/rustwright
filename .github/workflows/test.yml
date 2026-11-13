@@ -11,6 +11,7 @@ jobs:
     # Chromium race/stability tests that hold green on this runner class but
     # produce false failures on ubuntu-latest.
     runs-on: ubuntu-22.04
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
