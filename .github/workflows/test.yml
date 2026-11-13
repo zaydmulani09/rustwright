@@ -11,6 +11,7 @@ jobs:
     # Chromium race/stability tests that hold green on this runner class but
     # produce false failures on ubuntu-latest.
     runs-on: ubuntu-22.04
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +62,7 @@ jobs:
 
       - name: Run fast representative pytest subset
         run: >-
-          pytest tests/test_rustwright_sync_api.py
+          pytest -v tests/test_rustwright_sync_api.py
           -k "test_launch_goto_title_and_url or
           test_goto_returns_real_response_status_headers_and_body or
           test_navigation_response_body_remains_readable_after_later_navigation or
