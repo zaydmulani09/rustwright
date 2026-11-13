@@ -246,7 +246,7 @@ def test_async_wait_for_function_dispatches_predicate_once(class_name, timeout) 
             if budget and budget < 200:
                 # A predicate promise that outlives the budget is dropped.
                 time.sleep(budget / 1000)
-                raise TimeoutError(f"Page.wait_for_function: Timeout {budget}ms exceeded.")
+                raise TimeoutError(f"Timeout {budget}ms exceeded.")
             time.sleep(0.2)
             return handle
 
@@ -341,6 +341,31 @@ def test_wait_for_function_releases_unmatched_handle_after_cancellation(owner) -
 
     assert released == [handle]
     assert handle._disposed
+
+
+def test_evaluate_argument_temporaries_are_released_after_cancellation() -> None:
+    from rustwright import _rustwright, sync_api
+
+    token = _rustwright._RustCancelToken()
+    released = []
+
+    class Handle:
+        def dispose(self):
+            # JSHandle.dispose releases the remote object through _call.
+            sync_api._call(released.append, self)
+
+    temporary = Handle()
+    prepared = sync_api._PreparedEvaluateArgument(value=None, temporaries=[temporary])
+
+    context = sync_api._ACTION_CANCELLATION.set(token)
+    try:
+        # wait_for_function(arg=element_handle) is cancelled while its poll is in the page.
+        token.cancel()
+        prepared.dispose_temporaries()
+    finally:
+        sync_api._ACTION_CANCELLATION.reset(context)
+
+    assert released == [temporary]
 
 
 def test_non_class_async_helpers_stay_hand_written() -> None:

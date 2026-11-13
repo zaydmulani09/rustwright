@@ -27694,7 +27694,7 @@ class _PreparedEvaluateArgument:
     def dispose_temporaries(self) -> None:
         for handle in self.temporaries:
             try:
-                handle.dispose()
+                _call_cleanup(handle.dispose)
             except Error:
                 pass
 

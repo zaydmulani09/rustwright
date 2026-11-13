@@ -12865,11 +12865,17 @@ def test_async_wait_for_function_cancellation_stops_polling_the_page():
                     await waiter
                 assert time.monotonic() - cancelled_at < 1.0
 
-                # Let a poll that was already in the page finish, then expect silence.
-                await asyncio.sleep(0.2)
-                polls = await page.evaluate("() => window.__polls")
-                await asyncio.sleep(0.3)
-                assert await page.evaluate("() => window.__polls") == polls
+                # A poll that was already in the page may still land. After that the
+                # count must settle: live 10ms polling would add about 30 per sample.
+                polls = -1
+                for _ in range(20):
+                    await asyncio.sleep(0.3)
+                    current = await page.evaluate("() => window.__polls")
+                    if current == polls:
+                        break
+                    polls = current
+                else:
+                    pytest.fail("the page was still being polled after cancellation")
             finally:
                 await browser.close()
 
